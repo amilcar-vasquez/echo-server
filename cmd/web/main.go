@@ -3,14 +3,18 @@
 package main
 
 import (
-	"fmt"
+	"log"
+	"net/http"
 )
 
-func printWebSockets() string {
-    return "Hello, RFC6455!"
+func handlerWS(w http.ResponseWriter, r *http.Request){
+    w.Write([]byte("WebSockets!\n"))
 }
 
 func main() {
-    greeting := printWebSockets()
-    fmt.Println(greeting)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/ws", handlerWS)
+	log.Print("Starting server on :4000")
+	err := http.ListenAndServe(":4000", mux)
+	log.Fatal(err)
 }

@@ -3,14 +3,22 @@
 package main
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 )
 
-func TestMain(t *testing.T) {
-	want := "Hello, RFC6455!"
-	got := printWebSockets()
+func TestHandlerWS(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/ws", nil)
+	rr := httptest.NewRecorder()
+	handlerWS(rr, req)
 
-	if got != want {
-		t.Errorf("expected: %q, got: %q", want, got)
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("handler returned wrong status code: got %v expected %v", status, http.StatusOK)
+	}
+	
+	expected := "WebSockets!\n"
+	if got := rr.Body.String(); got != expected {
+		t.Errorf("handler returned unexpected body: got %q expected %q", got, expected)
 	}
 }
