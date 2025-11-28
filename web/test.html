@@ -26,6 +26,7 @@
     <button id="start">Start Sending (client ping)</button>
     <button id="stop">Stop Sending</button>
     <button id="upper">Send UPPER: Test</button>
+    <button id="reverse">Send REVERSE: Test</button>
     <pre id="log"></pre>
 
     <script>
@@ -114,6 +115,18 @@
           return;
         }
         const msg = "UPPER:hello world";
+        socket.send(msg);
+        log("SEND:", msg);
+      });
+
+      // --- SEND REVERSE: TEST -----------------------------------------
+      const reverseBtn = document.querySelector("#reverse");
+      reverseBtn.addEventListener("click", () => {
+        if (!socket || socket.readyState !== WebSocket.OPEN) {
+          log("Not connected yet.");
+          return;
+        }
+        const msg = "REVERSE:drawer";
         socket.send(msg);
         log("SEND:", msg);
       });

@@ -132,13 +132,21 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		if msgType == websocket.TextMessage {
 			_ = conn.SetWriteDeadline(time.Now().Add(writeWait))
 
-			// Check if the message starts with "UPPER:"
+			// Check if the message starts with "UPPER:" or "REVERSE:"
 			message := string(payload)
 			var response []byte
 			if strings.HasPrefix(message, "UPPER:") {
 				// Extract the rest and convert to uppercase
 				text := strings.TrimPrefix(message, "UPPER:")
 				response = []byte(strings.ToUpper(text))
+			} else if strings.HasPrefix(message, "REVERSE:") {
+				// Extract the rest and reverse the string
+				text := strings.TrimPrefix(message, "REVERSE:")
+				runes := []rune(text)
+				for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
+					runes[i], runes[j] = runes[j], runes[i]
+				}
+				response = []byte(string(runes))
 			} else {
 				// Echo back as-is
 				response = payload
@@ -148,6 +156,7 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 				log.Printf("write error: %v", err)
 				break
 			}
+			log.Printf("echoed message to %s: %q", r.RemoteAddr, response)
 		}
 	}
 
