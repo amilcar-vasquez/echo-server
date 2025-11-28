@@ -11,7 +11,7 @@ import (
 func TestHandlerWS(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/ws", nil)
 	rr := httptest.NewRecorder()
-	handlerWS(rr, req)
+	handlerHome(rr, req)
 
 	if status := rr.Code; status != http.StatusOK {
 		t.Errorf("handler returned wrong status code: got %v expected %v", status, http.StatusOK)

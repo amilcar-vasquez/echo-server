@@ -5,15 +5,19 @@ package main
 import (
 	"log"
 	"net/http"
+
+	"github.com/lewisdalwin/echo/internal/ws"
 )
 
-func handlerWS(w http.ResponseWriter, r *http.Request){
+func handlerHome(w http.ResponseWriter, r *http.Request){
     w.Write([]byte("WebSockets!\n"))
 }
 
 func main() {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/ws", handlerWS)
+	mux.Handle("/", http.FileServer(http.Dir("./web")))
+	mux.HandleFunc("/test", handlerHome)
+	mux.HandleFunc("/ws", ws.HandleWebSocket)
 	log.Print("Starting server on :4000")
 	err := http.ListenAndServe(":4000", mux)
 	log.Fatal(err)
