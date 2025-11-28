@@ -3,15 +3,30 @@ package ws
 // Filename: internal/ws/handler.go
 
 import (
+	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
-	"strconv"
 
 	"github.com/gorilla/websocket"
 )
+
+// define request and response message structures
+type CommandRequest struct {
+	Command string  `json:"command"`
+	A       float64 `json:"a"`
+	B       float64 `json:"b"`
+}
+
+type CommandResponse struct {
+	Result  float64 `json:"result,omitempty"`
+	Command string  `json:"command"`
+	Error   string  `json:"error,omitempty"`
+}
 
 // Heartbeat and timeout settings
 const (
@@ -35,6 +50,62 @@ func originAllowed(o string) bool {
 		}
 	}
 	return false
+}
+
+func processCommand(payload []byte) ([]byte, error) {
+	var req CommandRequest
+	// Unmarshal the JSON payload
+	err := json.Unmarshal(payload, &req)
+	if err != nil {
+		// Return error response as JSON
+		resp := CommandResponse{
+			Command: "unknown",
+			Error:   fmt.Sprintf("invalid JSON: %v", err),
+		}
+		respBytes, _ := json.Marshal(resp)
+		return respBytes, nil
+	}
+
+	// Switch on req.Command for "add", "subtract", "multiply", "divide"
+	var result float64
+	var respErr string
+
+	switch req.Command {
+	case "add":
+		result = req.A + req.B
+	case "subtract":
+		result = req.A - req.B
+	case "multiply":
+		result = req.A * req.B
+	case "divide":
+		if req.B == 0 {
+			respErr = "division by zero"
+		} else {
+			result = req.A / req.B
+		}
+	default:
+		respErr = fmt.Sprintf("unknown command: %s", req.Command)
+	}
+
+	// Create command response with result
+	resp := CommandResponse{
+		Command: req.Command,
+	}
+
+	if respErr != "" {
+		resp.Error = respErr
+	} else {
+		resp.Result = result
+	}
+
+	// Marshal response to JSON
+	respBytes, err := json.Marshal(resp)
+	if err != nil {
+		return nil, err
+	}
+
+	// Return JSON bytes
+	return respBytes, nil
 }
 
 // The upgrader object is used when we need to upgrade from HTTP to RFC 6455
@@ -154,6 +225,14 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 					runes[i], runes[j] = runes[j], runes[i]
 				}
 				responseBody = string(runes)
+			} else if len(message) > 0 && strings.HasPrefix(message, "{") {
+				// Attempt to process as command
+				resp, err := processCommand(payload)
+				if err != nil {
+					responseBody = fmt.Sprintf(`{"error":"%s"}`, err.Error())
+				} else {
+					responseBody = string(resp)
+				}
 			} else {
 				// Echo back as-is
 				responseBody = message
