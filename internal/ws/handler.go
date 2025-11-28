@@ -6,7 +6,9 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
+	"strconv"
 
 	"github.com/gorilla/websocket"
 )
@@ -49,6 +51,9 @@ var upgrader = websocket.Upgrader{
 		http.Error(w, "origin not allowed", http.StatusForbidden)
 	},
 }
+
+// A simple atomic counter for connection IDs
+var messageCounter uint64
 
 // Attempt to upgrade from HTTP to RFC 6455
 func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
@@ -128,35 +133,40 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		// We successfully read a message; normal traffic also keeps the connection alive.
 		// Note: the pong handler also updates the read deadline on pongs.
 
-		// Echo back text messages
+		// Echo back text messages, formatting the response to include the message counter
 		if msgType == websocket.TextMessage {
+			// Increment message counter
+			id := atomic.AddUint64(&messageCounter, 1)
+			log.Printf("received message #%d from %s: %q", id, r.RemoteAddr, payload)
 			_ = conn.SetWriteDeadline(time.Now().Add(writeWait))
 
-			// Check if the message starts with "UPPER:" or "REVERSE:"
 			message := string(payload)
-			var response []byte
+			var responseBody string
+
+			// Check if the message starts with "UPPER:" or "REVERSE:"
 			if strings.HasPrefix(message, "UPPER:") {
-				// Extract the rest and convert to uppercase
 				text := strings.TrimPrefix(message, "UPPER:")
-				response = []byte(strings.ToUpper(text))
+				responseBody = strings.ToUpper(text)
 			} else if strings.HasPrefix(message, "REVERSE:") {
-				// Extract the rest and reverse the string
 				text := strings.TrimPrefix(message, "REVERSE:")
 				runes := []rune(text)
 				for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
 					runes[i], runes[j] = runes[j], runes[i]
 				}
-				response = []byte(string(runes))
+				responseBody = string(runes)
 			} else {
 				// Echo back as-is
-				response = payload
+				responseBody = message
 			}
 
-			if err := conn.WriteMessage(websocket.TextMessage, response); err != nil {
+			// Format the response to include the counter
+			formatted := "#" + strconv.FormatUint(id, 10) + " " + responseBody
+
+			if err := conn.WriteMessage(websocket.TextMessage, []byte(formatted)); err != nil {
 				log.Printf("write error: %v", err)
 				break
 			}
-			log.Printf("echoed message to %s: %q", r.RemoteAddr, response)
+			log.Printf("echoed message #%d to %s: %q", id, r.RemoteAddr, formatted)
 		}
 	}
 
