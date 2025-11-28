@@ -1,4 +1,3 @@
-
 package ws
 
 // Filename: internal/ws/handler.go
@@ -132,7 +131,20 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		// Echo back text messages
 		if msgType == websocket.TextMessage {
 			_ = conn.SetWriteDeadline(time.Now().Add(writeWait))
-			if err := conn.WriteMessage(websocket.TextMessage, payload); err != nil {
+
+			// Check if the message starts with "UPPER:"
+			message := string(payload)
+			var response []byte
+			if strings.HasPrefix(message, "UPPER:") {
+				// Extract the rest and convert to uppercase
+				text := strings.TrimPrefix(message, "UPPER:")
+				response = []byte(strings.ToUpper(text))
+			} else {
+				// Echo back as-is
+				response = payload
+			}
+
+			if err := conn.WriteMessage(websocket.TextMessage, response); err != nil {
 				log.Printf("write error: %v", err)
 				break
 			}
