@@ -144,6 +144,16 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("connection opened from %s", r.RemoteAddr)
 
+	// Register this connection with the hub for broadcasting
+	Hub.Register(conn)
+	defer Hub.Unregister(conn)
+
+	// Initialize rate limiter: 10 messages per minute
+	rateLimiter := NewRateLimiter(10, time.Minute)
+
+	// Initialize command history: last 5 commands
+	history := NewCommandHistory(5)
+
 	// Limit message size
 	conn.SetReadLimit(1024 * 4)
 
@@ -206,6 +216,15 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 		// Echo back text messages, formatting the response to include the message counter
 		if msgType == websocket.TextMessage {
+			// Check rate limit
+			if !rateLimiter.AllowMessage() {
+				_ = conn.SetWriteDeadline(time.Now().Add(writeWait))
+				errMsg := `{"error":"rate limit exceeded: max 10 messages per minute"}`
+				_ = conn.WriteMessage(websocket.TextMessage, []byte(errMsg))
+				log.Printf("rate limit exceeded for %s", r.RemoteAddr)
+				continue
+			}
+
 			// Increment message counter
 			id := atomic.AddUint64(&messageCounter, 1)
 			log.Printf("received message #%d from %s: %q", id, r.RemoteAddr, payload)
@@ -214,10 +233,11 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 			message := string(payload)
 			var responseBody string
 
-			// Check if the message starts with "UPPER:" or "REVERSE:"
+			// Check for special commands
 			if strings.HasPrefix(message, "UPPER:") {
 				text := strings.TrimPrefix(message, "UPPER:")
 				responseBody = strings.ToUpper(text)
+				history.Add("UPPER:" + text)
 			} else if strings.HasPrefix(message, "REVERSE:") {
 				text := strings.TrimPrefix(message, "REVERSE:")
 				runes := []rune(text)
@@ -225,6 +245,15 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 					runes[i], runes[j] = runes[j], runes[i]
 				}
 				responseBody = string(runes)
+				history.Add("REVERSE:" + text)
+			} else if strings.HasPrefix(message, "BROADCAST:") {
+				text := strings.TrimPrefix(message, "BROADCAST:")
+				broadcastMsg := fmt.Sprintf("[BROADCAST from %s] %s", r.RemoteAddr, text)
+				Hub.Broadcast([]byte(broadcastMsg), conn)
+				responseBody = "Broadcast sent to all clients"
+				history.Add("BROADCAST:" + text)
+			} else if strings.ToUpper(strings.TrimSpace(message)) == "HISTORY" {
+				responseBody = history.GetHistoryJSON()
 			} else if len(message) > 0 && strings.HasPrefix(message, "{") {
 				// Attempt to process as command
 				resp, err := processCommand(payload)
@@ -232,6 +261,11 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 					responseBody = fmt.Sprintf(`{"error":"%s"}`, err.Error())
 				} else {
 					responseBody = string(resp)
+					// Track JSON commands in history
+					var cmd CommandRequest
+					if json.Unmarshal(payload, &cmd) == nil {
+						history.Add(fmt.Sprintf("JSON:%s", cmd.Command))
+					}
 				}
 			} else {
 				// Echo back as-is

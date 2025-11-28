@@ -28,11 +28,17 @@
     <button id="upper">Send UPPER: Test</button>
     <button id="reverse">Send REVERSE: Test</button>
     <br><br>
-    <button id="add">Add</button>
-    <button id="subtract">Subtract</button>
-    <button id="multiply">Multiply</button>
-    <button id="divide">Divide</button>
+    <strong>JSON Commands:</strong>
+    <button id="add">Add (10 + 5)</button>
+    <button id="subtract">Subtract (10 - 5)</button>
+    <button id="multiply">Multiply (10 * 5)</button>
+    <button id="divide">Divide (10 / 5)</button>
     <button id="divideZero">Divide by Zero</button>
+    <br><br>
+    <strong>Bonus Features:</strong>
+    <button id="broadcast">Broadcast Message</button>
+    <button id="history">Get History</button>
+    <button id="rateTest">Test Rate Limit (spam)</button>
     <pre id="log"></pre>
 
     <script>
@@ -54,6 +60,9 @@
       const multiply_btn = document.querySelector("#multiply");
       const divide_btn = document.querySelector("#divide");
       const divideZero_btn = document.querySelector("#divideZero");
+      const broadcast_btn = document.querySelector("#broadcast");
+      const history_btn = document.querySelector("#history");
+      const rateTest_btn = document.querySelector("#rateTest");
 
       // --- CONNECT ---------------------------------------------------
       connect_btn.addEventListener("click", () => {
@@ -202,6 +211,42 @@
         const msg = JSON.stringify({command: "divide", a: 1000, b: 0});
         socket.send(msg);
         log("SEND:", msg);
+      });
+
+      // --- BROADCAST MESSAGE ----------------------------------------
+      broadcast_btn.addEventListener("click", () => {
+        if (!socket || socket.readyState !== WebSocket.OPEN) {
+          log("Not connected yet.");
+          return;
+        }
+        const msg = "BROADCAST:Hello from " + new Date().toLocaleTimeString();
+        socket.send(msg);
+        log("SEND:", msg);
+      });
+
+      // --- GET HISTORY ---------------------------------------------
+      history_btn.addEventListener("click", () => {
+        if (!socket || socket.readyState !== WebSocket.OPEN) {
+          log("Not connected yet.");
+          return;
+        }
+        socket.send("HISTORY");
+        log("SEND: HISTORY");
+      });
+
+      // --- TEST RATE LIMIT -----------------------------------------
+      rateTest_btn.addEventListener("click", () => {
+        if (!socket || socket.readyState !== WebSocket.OPEN) {
+          log("Not connected yet.");
+          return;
+        }
+        log("Sending 15 messages rapidly (rate limit is 10/min)...");
+        for (let i = 1; i <= 15; i++) {
+          setTimeout(() => {
+            socket.send(`Test message ${i}`);
+            log(`SEND: Test message ${i}`);
+          }, i * 100); // 100ms apart
+        }
       });
     </script>
   </body>
